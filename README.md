@@ -1,7 +1,7 @@
 ## Setup backend
 
 1. just create MongoDB Atlas accout database url
-2. open .env and paste your MongoDB url here : DATABASE=your-mongodb-url
+2. open .env.example and copy variable and fill content in .env
 3. npm install
 
 ## start server
