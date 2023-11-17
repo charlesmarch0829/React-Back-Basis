@@ -341,7 +341,7 @@ exports.getReply = async (req, res, next) => {
   const language = "English";
   let conversationHistory = [];
   const messages = [];
-  conversationHistory = jsonToConversation(messages);
+  // conversationHistory = jsonToConversation(messages);
 
   const pinecone = new PineconeClient();
 
@@ -372,26 +372,25 @@ exports.getReply = async (req, res, next) => {
 // CONVERSATION LOG: {conversationHistory}
 
     const qaTemplate = `Answer the question based on the context below. You should follow ALL the following rules when generating and answer:
-    - There will be a CONVERSATION LOG, CONTEXT, and a QUESTION.
+    
     - The final answer must always be styled using markdown.
     - Your main goal is to point the user to the right source of information based on the CONTEXT you are given.
     - Your secondary goal is to provide the user with an answer that is relevant to the question.
     - Provide the user with a code example that is relevant to the question, if the context contains relevant code examples. Do not make up any code examples on your own.
-    - Take into account the entire conversation so far, marked as CONVERSATION LOG, but prioritize the CONTEXT.
+    
     - Based on the CONTEXT, choose the source that is most relevant to the QUESTION.
     - Do not make up any answers if the CONTEXT does not have relevant information.
     - Use bullet points, lists, paragraphs and text styling to present the answer in markdown.
     - The CONTEXT is a set of JSON objects, each includes the field "text" where the content is stored, and "url" where the url of the page is stored.
     - Always include the source at the end of the answer. The format is Source: [SOURCE]. The SOURCE is same as the "url" field of CONTENT. If the format of "url" field website_url then format of SOURCE is same as website_url. If the format of "url" field is the youtube_url then the format of SOURCE is same as youtube_url. If the format of the url "field" is file_name or "Plain Text" then don't provide the SOURCE.
-    - Do not mention the CONTEXT or the CONVERSATION LOG in the answer, but use them to generate the answer.
-    - ALWAYS prefer the result with the highest "score" value.
-    - Ignore any content that is stored in html tables.
+    
+    
     - The answer should only be based on the CONTEXT. Do not use any external sources. Do not generate the response based on the question without clear reference to the context.
     - Summarize the CONTEXT to make it easier to read, but don't omit any information.
     - Don't provide a link if it is not found in the CONTEXT.
-    - Please answer in ${language}.
+    
 
-    CONVERSATION LOG: {conversationHistory}
+    
 
     CONTEXT: {summaries}
 
@@ -401,22 +400,30 @@ exports.getReply = async (req, res, next) => {
 
     Final Answer: `;
 
-    const inquiryChain = new LLMChain({
-      llm,
-      prompt: new PromptTemplate({
-        template: inquiryTemplate,
-        // inputVariables: ["userPrompt", "conversationHistory"],
-        inputVariables: ["userPrompt"],
-      }),
-    });
+    // CONVERSATION LOG: {conversationHistory}
+    // - There will be a CONVERSATION LOG, CONTEXT, and a QUESTION.
+    // - Take into account the entire conversation so far, marked as CONVERSATION LOG, but prioritize the CONTEXT.
+    // - Do not mention the CONTEXT or the CONVERSATION LOG in the answer, but use them to generate the answer.
+    // - Please answer in ${language}.
+    // - ALWAYS prefer the result with the highest "score" value.
+    //- Ignore any content that is stored in html tables.
 
-    const inquiryChainResult = await inquiryChain.call({
-      userPrompt: query,
-      // conversationHistory,
-    });
+    // const inquiryChain = new LLMChain({
+    //   llm,
+    //   prompt: new PromptTemplate({
+    //     template: inquiryTemplate,
+    //     // inputVariables: ["userPrompt", "conversationHistory"],
+    //     inputVariables: ["userPrompt"],
+    //   }),
+    // });
 
-    const inquiry = inquiryChainResult.text;
+    // const inquiryChainResult = await inquiryChain.call({
+    //   userPrompt: query,
+    //   // conversationHistory,
+    // });
 
+    // const inquiry = inquiryChainResult.text;
+    const inquiry = query;
     console.log("inquiry: ", inquiry);
 
     const embedder = new OpenAIEmbeddings({
@@ -426,14 +433,14 @@ exports.getReply = async (req, res, next) => {
     const embeddings = await embedder.embedQuery(inquiry);
     const queryRequest = {
       vector: embeddings,
-      topK: 5,
+      topK: 3,
       namespace: namespace,
       includeMetadata: true,
       // includeMetadata: false,
     };
 
     const queryResult = await pineconeIndex.query({ queryRequest });
-    // console.log("queryResult", queryRequest);
+    
 
     const matches =
       queryResult.matches?.map((match) => ({
@@ -467,7 +474,8 @@ exports.getReply = async (req, res, next) => {
       ).map(([_, text]) => text);
     const promptTemplate = new PromptTemplate({
       template: qaTemplate,
-      inputVariables: ["summaries", "question", "conversationHistory", "urls"],
+      inputVariables: ["summaries", "question", "urls"],
+      // inputVariables: ["summaries", "question", "conversationHistory", "urls"],
     });
 
     const chat = new ChatOpenAI({
@@ -498,12 +506,12 @@ exports.getReply = async (req, res, next) => {
       allDocs.length > 4000
         ? await summarizeLongDocument({ document: allDocs, inquiry })
         : allDocs;
-
+    console.log("queryResult");
     await chain
       .call({
         summaries: summary,
         question: query,
-        conversationHistory,
+        // conversationHistory,
         urls,
       })
       .then(async (row) => {
