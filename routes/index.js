@@ -1,17 +1,9 @@
-const router = require('express').Router();
-const rateLimit = require('express-rate-limit');
-const authJwt = require('../controllers/auth/authJwt');
+const express = require("express");
+const router = express.Router();
+const controller = require("../controllers/index");
 
-const apiLimiter = rateLimit({
-  windowMs: 10 * 60 * 1000, // 10 minutes
-  max: 200, // maximum of 200 requests per windowMs
-});
-
-router.use('/', apiLimiter);
-// Authentication
-router.use('/auth', require('./auth.routes'));
-
-// Everything after this requires user authentication
-router.use('/', authJwt.verifyToken);
+router.post("/test", controller.test);
+router.post("/train", controller.createChatbot);
+router.post("/reply", controller.getReply);
 
 module.exports = router;
