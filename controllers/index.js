@@ -154,6 +154,7 @@ const getEmbedding = async (doc) => {
     modelName: "text-embedding-ada-002",
     openAIApiKey: "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",
   });
+  
   const embedding = await embedder.embedQuery(doc.pageContent);
 
   return {
