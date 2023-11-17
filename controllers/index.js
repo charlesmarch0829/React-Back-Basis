@@ -1,4 +1,4 @@
-const { Pinecone } = require("@pinecone-database/pinecone");
+const { Pinecone, PineconeClient } = require("@pinecone-database/pinecone");
 const xlsx = require("xlsx");
 const { PDFLoader } = require("langchain/document_loaders/fs/pdf");
 const { DocxLoader } = require("langchain/document_loaders/fs/docx");
@@ -18,7 +18,7 @@ const Bottleneck = require("bottleneck");
 const { LLMChain } = require("langchain/chains");
 const openai = require("openai");
 
-const uuidv4 = require("uuid");
+const uuid = require("uuid");
 
 require("dotenv").config();
 const limiter = new Bottleneck({
@@ -150,15 +150,16 @@ const sliceIntoChunks = (arr, chunkSize) => {
 };
 
 const getEmbedding = async (doc) => {
+  console.log(process.env.OPENAI_API_KEY);
   const embedder = new OpenAIEmbeddings({
     modelName: "text-embedding-ada-002",
-    openAIApiKey: "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",
+    openAIApiKey: process.env.OPENAI_API_KEY,
   });
   
   const embedding = await embedder.embedQuery(doc.pageContent);
 
   return {
-    id: uuidv4(),
+    id: uuid.v1(),
     values: embedding,
     metadata: {
       chunk: doc.pageContent,
@@ -293,14 +294,14 @@ exports.createChatbot = async (req, res, next) => {
       // });
       const chunks = sliceIntoChunks(vectors, 10);
 
-      const pinecone = new Pinecone();
+      const pinecone = new PineconeClient();
 
       await pinecone.init({
         apiKey: process.env.PINECONE_API_KEY,
         environment: process.env.PINECONE_ENVIRONMENT,
       });
 
-      const pineconeIndex = pinecone.index(process.env.PINECONE_INDEX);
+      const pineconeIndex = pinecone.Index(process.env.PINECONE_INDEX);
       const namespace = "11bf5b37-e0b8-42e0-8dcf-dc8c4aefc000";
 
       await Promise.all(
@@ -331,10 +332,10 @@ exports.createChatbot = async (req, res, next) => {
 
 exports.getReply = async (req, res, next) => {
   console.log(req.body.query);
-  return res.status(200).json({
-    success: true,
-    message: "Successfully found all documents",
-  });
+  // return res.status(200).json({
+  //   success: true,
+  //   message: "Successfully found all documents",
+  // });
   const { query } = req.body;
   const namespace = "11bf5b37-e0b8-42e0-8dcf-dc8c4aefc000";
   const language = "English";
@@ -342,13 +343,13 @@ exports.getReply = async (req, res, next) => {
   const messages = [];
   conversationHistory = jsonToConversation(messages);
 
-  const pinecone = new Pinecone();
+  const pinecone = new PineconeClient();
 
   await pinecone.init({
     environment: process.env.PINECONE_ENVIRONMENT,
     apiKey: process.env.PINECONE_API_KEY,
   });
-  const pineconeIndex = pinecone.index(process.env.PINECONE_INDEX);
+  const pineconeIndex = pinecone.Index(process.env.PINECONE_INDEX);
   const llm = new OpenAI({});
 
   try {
@@ -361,13 +362,14 @@ exports.getReply = async (req, res, next) => {
     - You should remove any punctuation from the question
     - You should remove any words that are not relevant to the question
     - If you are unable to formulate a question, respond with the same USER PROMPT you got.
-
+    - If there is no conversation log, use only the user prompt
     USER PROMPT: {userPrompt}
 
-    CONVERSATION LOG: {conversationHistory}
+    
 
     Final answer:
     `;
+// CONVERSATION LOG: {conversationHistory}
 
     const qaTemplate = `Answer the question based on the context below. You should follow ALL the following rules when generating and answer:
     - There will be a CONVERSATION LOG, CONTEXT, and a QUESTION.
@@ -403,13 +405,14 @@ exports.getReply = async (req, res, next) => {
       llm,
       prompt: new PromptTemplate({
         template: inquiryTemplate,
-        inputVariables: ["userPrompt", "conversationHistory"],
+        // inputVariables: ["userPrompt", "conversationHistory"],
+        inputVariables: ["userPrompt"],
       }),
     });
 
     const inquiryChainResult = await inquiryChain.call({
       userPrompt: query,
-      conversationHistory,
+      // conversationHistory,
     });
 
     const inquiry = inquiryChainResult.text;
@@ -513,7 +516,7 @@ exports.getReply = async (req, res, next) => {
   } catch (error) {
     console.log("error", error);
   } finally {
-    sendData("[DONE]");
+    // sendData("[DONE]");
     res.end();
   }
 };
