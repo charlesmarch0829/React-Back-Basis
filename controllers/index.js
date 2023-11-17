@@ -352,6 +352,19 @@ exports.getReply = async (req, res, next) => {
   const pineconeIndex = pinecone.Index(process.env.PINECONE_INDEX);
   const llm = new OpenAI({});
 
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+  });
+
+  const sendData = (data) => {
+    const response = {
+      data: data,
+    };
+    res.write(`data: ${JSON.stringify(response)}\n\n`);
+  };
+
   try {
     const inquiryTemplate = `Given the following user prompt and conversation log, formulate a question that would be the most relevant to provide the user with an answer from a knowledge base.
     You should follow the following rules when generating and answer:
@@ -426,7 +439,7 @@ exports.getReply = async (req, res, next) => {
     const embeddings = await embedder.embedQuery(inquiry);
     const queryRequest = {
       vector: embeddings,
-      topK: 5,
+      topK: 3,
       namespace: namespace,
       includeMetadata: true,
       // includeMetadata: false,
@@ -471,8 +484,10 @@ exports.getReply = async (req, res, next) => {
     });
 
     const chat = new ChatOpenAI({
+      streaming: true,
       verbose: true,
-      // temperature: 0.7,
+      temperature: 0,
+      cache: true,
       // topP: topP,
       // frequencyPenalty: frequency,
       // presencePenalty: presence,
@@ -482,9 +497,16 @@ exports.getReply = async (req, res, next) => {
 
       // callbackManager: CallbackManager.fromHandlers({
       //   async handleLLMNewToken(token) {
-      //     sendData(token, chatId);
+      //     sendData(token);
       //   },
       // }),
+      callbacks: [
+        {
+          handleLLMNewToken(token) {
+            sendData(token);
+          },
+        },
+      ],
     });
 
     const chain = new LLMChain({
@@ -498,25 +520,27 @@ exports.getReply = async (req, res, next) => {
       allDocs.length > 4000
         ? await summarizeLongDocument({ document: allDocs, inquiry })
         : allDocs;
-
+    
     await chain
       .call({
         summaries: summary,
+        // question: query,
         question: query,
         conversationHistory,
         urls,
       })
-      .then(async (row) => {
-        console.log("row", row);
-        res.status(200).json({
-          success: "Success",
-          payload: row.text,
-        });
-      });
+      // .then(async (row) => {
+      //   console.log("row", row);
+      //   // res.status(200).json({
+      //   //   success: "Success",
+      //   //   payload: row.text,
+      //   // });
+      //   sendData('');
+      // });
   } catch (error) {
     console.log("error", error);
   } finally {
-    // sendData("[DONE]");
+    sendData("[DONE]");
     res.end();
   }
 };
